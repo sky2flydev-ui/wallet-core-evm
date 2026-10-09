@@ -154,3 +154,74 @@ describe('EIP-1559 transaction pipeline', () => {
     ).rejects.toThrow('non-negative');
   });
 });
+
+describe('ERC-20 operations', () => {
+  const from = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' as const;
+  const token = '0x00000000000000000000000000000000000000aa' as const;
+  const recipient = '0x00000000000000000000000000000000000000bb' as const;
+  it('encodes transfer, simulates it, and exposes token details in preview', async () => {
+    const calls: string[] = [];
+    const rpc = new EvmRpc({
+      request: async <T>(method: string) => {
+        calls.push(method);
+        const values: Record<string, string> = {
+          eth_chainId: '0x1',
+          eth_getTransactionCount: '0x2',
+          eth_gasPrice: '0x3b9aca00',
+          eth_maxPriorityFeePerGas: '0x3b9aca0',
+          eth_call: '0x',
+          eth_estimateGas: '0x927c',
+        };
+        return values[method] as T;
+      },
+    });
+    const { Erc20Builder, NETWORKS, TransactionBuilder } = await import('../src/index.js');
+    const prepared = await new Erc20Builder(new TransactionBuilder(rpc), rpc).prepareTransfer({
+      from,
+      token,
+      to: recipient,
+      amount: 1_500n,
+      tokenSymbol: 'TST',
+      network: NETWORKS.ethereum,
+    });
+    expect(prepared.preview.action).toBe('erc20-transfer');
+    expect(prepared.preview.tokenAmount).toBe(1_500n);
+    expect(prepared.preview.tokenSymbol).toBe('TST');
+    expect(calls.indexOf('eth_call')).toBeGreaterThan(-1);
+    expect(calls.indexOf('eth_call')).toBeLessThan(calls.indexOf('eth_estimateGas'));
+    expect(prepared.transaction.to).toBe('0x00000000000000000000000000000000000000AA');
+  });
+  it('encodes approve and rejects negative token amounts', async () => {
+    const rpc = new EvmRpc({
+      request: async <T>(method: string) =>
+        ({
+          eth_chainId: '0x1',
+          eth_getTransactionCount: '0x2',
+          eth_gasPrice: '0x1',
+          eth_maxPriorityFeePerGas: '0x1',
+          eth_call: '0x',
+          eth_estimateGas: '0x5208',
+        })[method] as T,
+    });
+    const { Erc20Builder, NETWORKS, TransactionBuilder } = await import('../src/index.js');
+    const builder = new Erc20Builder(new TransactionBuilder(rpc), rpc);
+    const prepared = await builder.prepareApprove({
+      from,
+      token,
+      spender: recipient,
+      amount: 10n,
+      network: NETWORKS.ethereum,
+    });
+    expect(prepared.preview.action).toBe('erc20-approve');
+    expect(prepared.preview.spender).toBe(recipient);
+    await expect(
+      builder.prepareTransfer({
+        from,
+        token,
+        to: recipient,
+        amount: -1n,
+        network: NETWORKS.ethereum,
+      }),
+    ).rejects.toThrow('non-negative');
+  });
+});

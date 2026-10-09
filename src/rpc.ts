@@ -43,6 +43,9 @@ export class EvmRpc {
   maxPriorityFeePerGas(): Promise<bigint> {
     return this.transport.request<string>('eth_maxPriorityFeePerGas').then((x) => BigInt(x));
   }
+  call(transaction: Record<string, unknown>, block = 'latest'): Promise<Hex> {
+    return this.transport.request<Hex>('eth_call', [transaction, block]);
+  }
   estimateGas(transaction: Record<string, unknown>): Promise<bigint> {
     return this.transport.request<string>('eth_estimateGas', [transaction]).then((x) => BigInt(x));
   }

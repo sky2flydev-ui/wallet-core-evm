@@ -11,6 +11,7 @@ Production-oriented **non-custodial EVM wallet core**. The package never sends a
 - Minimal JSON-RPC transport for chain ID, balance, nonce, and raw transaction broadcast.
 - Moralis token-balance adapter with injected API key and fetcher.
 - Network registry and EIP-1559 native-transfer preparation with chain-ID guard, fee preview, nonce, gas estimate, and local signing. No broadcast occurs during preparation or signing.
+- ERC-20 `transfer` and `approve` calldata builders with address/amount validation, `eth_call` simulation before gas estimation, and token-aware previews.
 - Strict TypeScript, no placeholder implementations, deterministic tests planned for the next increment.
 
 ## Security boundary

@@ -6,3 +6,4 @@ export * from './rpc.js';
 export * from './moralis.js';
 export * from './chains.js';
 export * from './transaction.js';
+export * from './erc20.js';

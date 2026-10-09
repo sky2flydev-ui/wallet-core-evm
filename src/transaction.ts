@@ -8,7 +8,7 @@ export interface NativeTransferRequest {
   readonly to: `0x${string}`;
   readonly value: bigint;
   readonly network: EvmNetwork;
-  readonly gasLimit?: bigint;
+  readonly gasLimit?: bigint | undefined;
 }
 export interface UnsignedEip1559Transaction {
   readonly type: 'eip1559';
@@ -20,6 +20,11 @@ export interface UnsignedEip1559Transaction {
   readonly gas: bigint;
   readonly maxFeePerGas: bigint;
   readonly maxPriorityFeePerGas: bigint;
+  readonly action?: string | undefined;
+  readonly tokenAddress?: `0x${string}` | undefined;
+  readonly tokenAmount?: bigint | undefined;
+  readonly tokenSymbol?: string | undefined;
+  readonly spender?: `0x${string}` | undefined;
 }
 export interface TransactionPreview {
   readonly network: string;
@@ -34,6 +39,25 @@ export interface TransactionPreview {
   readonly gasLimit: bigint;
   readonly maxFeePerGas: bigint;
   readonly maxPriorityFeePerGas: bigint;
+  readonly action?: string | undefined;
+  readonly tokenAddress?: `0x${string}` | undefined;
+  readonly tokenAmount?: bigint | undefined;
+  readonly tokenSymbol?: string | undefined;
+  readonly spender?: `0x${string}` | undefined;
+}
+export interface ContractCallRequest {
+  readonly from: `0x${string}`;
+  readonly to: `0x${string}`;
+  readonly value: bigint;
+  readonly data: Hex;
+  readonly network: EvmNetwork;
+  readonly gasLimit?: bigint | undefined;
+  readonly action: string;
+  readonly tokenAddress?: `0x${string}` | undefined;
+  readonly tokenAmount?: bigint | undefined;
+  readonly tokenSymbol?: string | undefined;
+  readonly spender?: `0x${string}` | undefined;
+  readonly simulation?: boolean;
 }
 export interface PreparedTransfer {
   readonly transaction: UnsignedEip1559Transaction;
@@ -98,6 +122,64 @@ export class TransactionBuilder {
         gasLimit: gas,
         maxFeePerGas,
         maxPriorityFeePerGas: priority,
+      },
+    };
+  }
+  async prepareContractCall(request: ContractCallRequest): Promise<PreparedTransfer> {
+    assertAddress(request.from, 'from');
+    assertAddress(request.to, 'to');
+    assertNonNegative(request.value, 'value');
+    const actualChainId = await this.rpc.chainId();
+    if (actualChainId !== BigInt(request.network.chainId))
+      throw new Error(
+        `RPC chain mismatch: expected ${request.network.chainId}, got ${actualChainId}`,
+      );
+    const nonce = await this.rpc.nonce(request.from);
+    const [gasPrice, priority] = await Promise.all([
+      this.rpc.gasPrice(),
+      this.rpc.maxPriorityFeePerGas(),
+    ]);
+    const maxFeePerGas = gasPrice > priority ? gasPrice : priority;
+    const rpcCall = {
+      from: getAddress(request.from),
+      to: getAddress(request.to),
+      value: `0x${request.value.toString(16)}`,
+      data: request.data,
+    };
+    if (request.simulation) await this.rpc.call(rpcCall);
+    const gas = request.gasLimit ?? (await this.rpc.estimateGas(rpcCall));
+    const transaction: UnsignedEip1559Transaction = {
+      type: 'eip1559',
+      chainId: request.network.chainId,
+      nonce,
+      from: getAddress(request.from),
+      to: getAddress(request.to),
+      value: request.value,
+      gas,
+      maxFeePerGas,
+      maxPriorityFeePerGas: priority,
+    };
+    const estimatedFee = gas * maxFeePerGas;
+    return {
+      transaction,
+      preview: {
+        network: request.network.name,
+        chainId: request.network.chainId,
+        from: transaction.from,
+        to: transaction.to,
+        value: request.value,
+        nativeSymbol: request.network.nativeSymbol,
+        estimatedFee,
+        totalDebit: request.value + estimatedFee,
+        nonce,
+        gasLimit: gas,
+        maxFeePerGas,
+        maxPriorityFeePerGas: priority,
+        action: request.action,
+        tokenAddress: request.tokenAddress,
+        tokenAmount: request.tokenAmount,
+        tokenSymbol: request.tokenSymbol,
+        spender: request.spender,
       },
     };
   }
