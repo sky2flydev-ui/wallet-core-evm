@@ -4,3 +4,5 @@ export * from './vault.js';
 export * from './wallet.js';
 export * from './rpc.js';
 export * from './moralis.js';
+export * from './chains.js';
+export * from './transaction.js';

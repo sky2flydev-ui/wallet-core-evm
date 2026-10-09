@@ -37,6 +37,15 @@ export class EvmRpc {
       .request<string>('eth_getTransactionCount', [address, tag])
       .then((x) => Number(BigInt(x)));
   }
+  gasPrice(): Promise<bigint> {
+    return this.transport.request<string>('eth_gasPrice').then((x) => BigInt(x));
+  }
+  maxPriorityFeePerGas(): Promise<bigint> {
+    return this.transport.request<string>('eth_maxPriorityFeePerGas').then((x) => BigInt(x));
+  }
+  estimateGas(transaction: Record<string, unknown>): Promise<bigint> {
+    return this.transport.request<string>('eth_estimateGas', [transaction]).then((x) => BigInt(x));
+  }
   sendRawTransaction(raw: Hex): Promise<Hex> {
     return this.transport.request<Hex>('eth_sendRawTransaction', [raw]);
   }

@@ -10,6 +10,7 @@ Production-oriented **non-custodial EVM wallet core**. The package never sends a
 - Local account derivation and viem-compatible signing accounts.
 - Minimal JSON-RPC transport for chain ID, balance, nonce, and raw transaction broadcast.
 - Moralis token-balance adapter with injected API key and fetcher.
+- Network registry and EIP-1559 native-transfer preparation with chain-ID guard, fee preview, nonce, gas estimate, and local signing. No broadcast occurs during preparation or signing.
 - Strict TypeScript, no placeholder implementations, deterministic tests planned for the next increment.
 
 ## Security boundary
@@ -28,6 +29,10 @@ const first = wallet.derive(0);
 const signer = wallet.account(0);
 const signature = await signer.signMessage({ message: 'hello' });
 ```
+
+## Transaction safety
+
+Use `TransactionBuilder.prepareNativeTransfer()` to obtain a complete preview before signing. The builder verifies the RPC chain ID, validates addresses, computes nonce and fees, and returns the exact estimated debit. Call `EvmRpc.sendRawTransaction()` separately only after the application has displayed and approved that preview.
 
 ## Roadmap
 

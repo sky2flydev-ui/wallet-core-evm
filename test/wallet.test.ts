@@ -89,3 +89,68 @@ describe('Moralis boundary', () => {
     expect(result[0]?.symbol).toBe('TST');
   });
 });
+
+describe('EIP-1559 transaction pipeline', () => {
+  const from = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' as const;
+  const to = '0x0000000000000000000000000000000000000001' as const;
+  const rpc = new EvmRpc({
+    request: async <T>(method: string) => {
+      const values: Record<string, string> = {
+        eth_chainId: '0x1',
+        eth_getTransactionCount: '0x7',
+        eth_gasPrice: '0x3b9aca00',
+        eth_maxPriorityFeePerGas: '0x3b9aca0',
+        eth_estimateGas: '0x5208',
+      };
+      return values[method] as T;
+    },
+  });
+  it('creates a preview with exact debit and signs locally', async () => {
+    const { TransactionBuilder, NETWORKS, EvmWallet } = await import('../src/index.js');
+    const prepared = await new TransactionBuilder(rpc).prepareNativeTransfer({
+      from,
+      to,
+      value: 1_000_000_000_000_000n,
+      network: NETWORKS.ethereum,
+    });
+    expect(prepared.transaction.nonce).toBe(7);
+    expect(prepared.transaction.gas).toBe(21_000n);
+    expect(prepared.preview.estimatedFee).toBe(21_000_000_000_000n);
+    const signature = await new TransactionBuilder(rpc).sign(
+      prepared,
+      EvmWallet.fromMnemonic(MNEMONIC).account(0),
+    );
+    expect(signature).toMatch(/^0x[0-9a-f]+$/);
+  });
+  it('blocks chain mismatch and mismatched signing account', async () => {
+    const { TransactionBuilder, NETWORKS, EvmWallet } = await import('../src/index.js');
+    const builder = new TransactionBuilder(rpc);
+    await expect(
+      builder.prepareNativeTransfer({ from, to, value: 1n, network: NETWORKS.sepolia }),
+    ).rejects.toThrow('RPC chain mismatch');
+    const prepared = await builder.prepareNativeTransfer({
+      from,
+      to,
+      value: 1n,
+      network: NETWORKS.ethereum,
+    });
+    await expect(
+      builder.sign(prepared, EvmWallet.fromMnemonic(MNEMONIC).account(1)),
+    ).rejects.toThrow('does not match');
+  });
+  it('rejects malformed addresses and negative values', async () => {
+    const { TransactionBuilder, NETWORKS } = await import('../src/index.js');
+    const builder = new TransactionBuilder(rpc);
+    await expect(
+      builder.prepareNativeTransfer({
+        from: '0xnope' as `0x${string}`,
+        to,
+        value: 1n,
+        network: NETWORKS.ethereum,
+      }),
+    ).rejects.toThrow('from must be a valid');
+    await expect(
+      builder.prepareNativeTransfer({ from, to, value: -1n, network: NETWORKS.ethereum }),
+    ).rejects.toThrow('non-negative');
+  });
+});
