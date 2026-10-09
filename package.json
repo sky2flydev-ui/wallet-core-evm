@@ -21,7 +21,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit -p tsconfig.json",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "release:check": "pnpm run lint && pnpm run build && pnpm test && pnpm run format:check",
+    "publish:npm": "node scripts/publish-npm.mjs",
+    "pack:check": "npm pack --dry-run"
   },
   "engines": {
     "node": ">=20"
