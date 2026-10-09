@@ -3,7 +3,7 @@ import { mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { privateKeyToAccount, type LocalAccount } from 'viem/accounts';
 import { mainnet } from 'viem/chains';
 import { createWalletClient, http, type Hex, type Chain, type WalletClient } from 'viem';
-import { wordlist } from '@scure/bip39/wordlists/english';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { InvalidMnemonicError } from './errors.js';
 import { unlockVault, type Vault, type VaultData } from './vault.js';
 

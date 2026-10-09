@@ -1,5 +1,5 @@
 import { generateMnemonic, mnemonicToEntropy, validateMnemonic } from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { decrypt, encrypt, type EncryptedVault } from './crypto.js';
 import { InvalidMnemonicError, InvalidVaultError, VaultDecryptionError } from './errors.js';
 
