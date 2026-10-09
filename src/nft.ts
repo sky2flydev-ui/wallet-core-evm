@@ -161,6 +161,60 @@ export class NftBuilder {
       operator: approved,
     });
   }
+  async prepareErc721ApprovalForAll(
+    fromInput: `0x${string}`,
+    tokenInput: `0x${string}`,
+    operatorInput: `0x${string}`,
+    approved: boolean,
+    network: EvmNetwork,
+  ): Promise<PreparedNft> {
+    const from = addr(fromInput, 'from');
+    const token = addr(tokenInput, 'token');
+    const operator = addr(operatorInput, 'operator');
+    const data = encodeFunctionData({
+      abi: erc721Abi,
+      functionName: 'setApprovalForAll',
+      args: [operator, approved],
+    });
+    const prepared = await this.transactions.prepareContractCall({
+      from,
+      to: token,
+      value: 0n,
+      data,
+      network,
+      action: 'erc721-set-approval-for-all',
+      tokenAddress: token,
+      simulation: true,
+    });
+    return withNftPreview(prepared, { standard: 'ERC-721', operator });
+  }
+  async prepareErc1155ApprovalForAll(
+    fromInput: `0x${string}`,
+    tokenInput: `0x${string}`,
+    operatorInput: `0x${string}`,
+    approved: boolean,
+    network: EvmNetwork,
+  ): Promise<PreparedNft> {
+    const from = addr(fromInput, 'from');
+    const token = addr(tokenInput, 'token');
+    const operator = addr(operatorInput, 'operator');
+    const data = encodeFunctionData({
+      abi: erc1155Abi,
+      functionName: 'setApprovalForAll',
+      args: [operator, approved],
+    });
+    const prepared = await this.transactions.prepareContractCall({
+      from,
+      to: token,
+      value: 0n,
+      data,
+      network,
+      action: 'erc1155-set-approval-for-all',
+      tokenAddress: token,
+      simulation: true,
+    });
+    return withNftPreview(prepared, { standard: 'ERC-1155', operator });
+  }
   async prepareErc1155Transfer(request: Erc1155TransferRequest): Promise<PreparedNft> {
     const from = addr(request.from, 'from');
     const token = addr(request.token, 'token');
