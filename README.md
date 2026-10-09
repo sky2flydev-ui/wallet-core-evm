@@ -15,7 +15,7 @@ Production-oriented **non-custodial EVM wallet core**. The package never sends a
 - ERC-721 and ERC-1155 safe transfer/approval builders with simulation and NFT-aware previews.
 - EIP-712 typed-data signing with domain chain-ID enforcement.
 - Atomic encrypted vault file storage with directory mode `0700`, file mode `0600`, temporary-file write, and rename. The file never contains the mnemonic in plaintext.
-- Strict TypeScript, no placeholder implementations, deterministic tests planned for the next increment.
+- Strict TypeScript, no placeholder implementations, and deterministic regression tests.
 
 ## Security boundary
 
@@ -36,7 +36,7 @@ const signature = await signer.signMessage({ message: 'hello' });
 
 ## Transaction safety
 
-Use `TransactionBuilder.prepareNativeTransfer()` to obtain a complete preview before signing. The builder verifies the RPC chain ID, validates addresses, computes nonce and fees, and returns the exact estimated debit. Call `EvmRpc.sendRawTransaction()` separately only after the application has displayed and approved that preview.
+Use `TransactionBuilder.prepareNativeTransfer()` to obtain a complete preview before signing. The builder verifies the RPC chain ID, validates addresses, reads the latest block `baseFeePerGas` and priority fee, and calculates `maxFeePerGas = 2 × baseFeePerGas + maxPriorityFeePerGas`. The same prepared `maxFeePerGas` is carried through preview, transaction object, and local signing; it is never silently replaced later. The 2× base-fee value is a common next-block safety envelope, not a guarantee of inclusion during arbitrary fee growth. If the RPC is unavailable, a typed `RPC_UNAVAILABLE` error is returned. If the latest block has no EIP-1559 base fee, the builder returns `EIP1559_UNAVAILABLE`; callers must use a legacy transaction path or an EIP-1559-capable network. Call `EvmRpc.sendRawTransaction()` separately only after the application has displayed and approved that preview.
 
 ## Roadmap
 

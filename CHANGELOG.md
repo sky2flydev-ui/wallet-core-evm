@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 - Подготовка публичного GitHub-релиза и npm publishing workflow.
+- Исправлен расчёт EIP-1559 `maxFeePerGas`: используется latest `baseFeePerGas` с явным safety envelope и priority fee.
+- Добавлены типизированные ошибки недоступного RPC и сетей без EIP-1559 base fee.
 
 ## [0.1.0] - 2026-10-09
 

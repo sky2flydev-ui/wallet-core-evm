@@ -1,19 +1,32 @@
 import type { Hex } from 'viem';
+import { Eip1559UnavailableError, RpcUnavailableError } from './errors.js';
+
 export interface RpcTransport {
   request<T = unknown>(method: string, params?: readonly unknown[]): Promise<T>;
 }
+
+export interface LatestBlock {
+  readonly baseFeePerGas: string | null;
+}
+
 export class JsonRpcTransport implements RpcTransport {
   constructor(
     private readonly url: string,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
   async request<T>(method: string, params: readonly unknown[] = []): Promise<T> {
-    const response = await this.fetcher(this.url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
-    });
-    if (!response.ok) throw new Error(`RPC HTTP ${response.status}`);
+    let response: Response;
+    try {
+      response = await this.fetcher(this.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new RpcUnavailableError(`RPC request failed for ${method}: ${detail}`);
+    }
+    if (!response.ok) throw new RpcUnavailableError(`RPC HTTP ${response.status} for ${method}`);
     const body = (await response.json()) as {
       result?: T;
       error?: { code: number; message: string };
@@ -22,6 +35,7 @@ export class JsonRpcTransport implements RpcTransport {
     return body.result as T;
   }
 }
+
 export class EvmRpc {
   constructor(private readonly transport: RpcTransport) {}
   chainId(): Promise<bigint> {
@@ -42,6 +56,15 @@ export class EvmRpc {
   }
   maxPriorityFeePerGas(): Promise<bigint> {
     return this.transport.request<string>('eth_maxPriorityFeePerGas').then((x) => BigInt(x));
+  }
+  latestBlock(): Promise<LatestBlock> {
+    return this.transport.request<LatestBlock>('eth_getBlockByNumber', ['latest', false]);
+  }
+  latestBaseFeePerGas(): Promise<bigint> {
+    return this.latestBlock().then((block) => {
+      if (!block.baseFeePerGas) throw new Eip1559UnavailableError();
+      return BigInt(block.baseFeePerGas);
+    });
   }
   call(transaction: Record<string, unknown>, block = 'latest'): Promise<Hex> {
     return this.transport.request<Hex>('eth_call', [transaction, block]);

@@ -61,6 +61,26 @@ describe('JSON-RPC boundary', () => {
     );
     await expect(transport.request('eth_chainId')).rejects.toThrow('RPC HTTP 503');
   });
+  it('returns a typed error when the RPC cannot be reached', async () => {
+    const transport = new JsonRpcTransport('https://rpc.invalid', async () => {
+      throw new Error('connect ECONNREFUSED');
+    });
+    await expect(transport.request('eth_chainId')).rejects.toMatchObject({
+      code: 'RPC_UNAVAILABLE',
+    });
+    await expect(transport.request('eth_chainId')).rejects.toThrow(
+      'RPC request failed for eth_chainId',
+    );
+  });
+  it('reports when a network has no EIP-1559 base fee', async () => {
+    const rpc = new EvmRpc({
+      request: async <T>(method: string) => {
+        if (method === 'eth_getBlockByNumber') return { baseFeePerGas: null } as T;
+        return '0x1' as T;
+      },
+    });
+    await expect(rpc.latestBaseFeePerGas()).rejects.toMatchObject({ code: 'EIP1559_UNAVAILABLE' });
+  });
 });
 
 describe('Moralis boundary', () => {
@@ -98,11 +118,12 @@ describe('EIP-1559 transaction pipeline', () => {
   const to = '0x0000000000000000000000000000000000000001' as const;
   const rpc = new EvmRpc({
     request: async <T>(method: string) => {
+      if (method === 'eth_getBlockByNumber') return { baseFeePerGas: '0x3b9aca00' } as T;
       const values: Record<string, string> = {
         eth_chainId: '0x1',
         eth_getTransactionCount: '0x7',
         eth_gasPrice: '0x3b9aca00',
-        eth_maxPriorityFeePerGas: '0x3b9aca0',
+        eth_maxPriorityFeePerGas: '0x5f5e100',
         eth_estimateGas: '0x5208',
       };
       return values[method] as T;
@@ -118,12 +139,40 @@ describe('EIP-1559 transaction pipeline', () => {
     });
     expect(prepared.transaction.nonce).toBe(7);
     expect(prepared.transaction.gas).toBe(21_000n);
-    expect(prepared.preview.estimatedFee).toBe(21_000_000_000_000n);
+    expect(prepared.preview.baseFeePerGas).toBe(1_000_000_000n);
+    expect(prepared.transaction.maxPriorityFeePerGas).toBe(100_000_000n);
+    expect(prepared.transaction.maxFeePerGas).toBe(2_100_000_000n);
+    expect(prepared.preview.estimatedFee).toBe(44_100_000_000_000n);
     const signature = await new TransactionBuilder(rpc).sign(
       prepared,
       EvmWallet.fromMnemonic(MNEMONIC).account(0),
     );
     expect(signature).toMatch(/^0x[0-9a-f]+$/);
+  });
+  it('uses the latest base fee plus a next-block safety envelope', async () => {
+    const { TransactionBuilder, NETWORKS } = await import('../src/index.js');
+    const requests: string[] = [];
+    const dynamicRpc = new EvmRpc({
+      request: async <T>(method: string) => {
+        requests.push(method);
+        if (method === 'eth_getBlockByNumber') return { baseFeePerGas: '0x59682f00' } as T;
+        return {
+          eth_chainId: '0x1',
+          eth_getTransactionCount: '0x0',
+          eth_maxPriorityFeePerGas: '0x5f5e100',
+          eth_estimateGas: '0x5208',
+        }[method] as T;
+      },
+    });
+    const prepared = await new TransactionBuilder(dynamicRpc).prepareNativeTransfer({
+      from,
+      to,
+      value: 1n,
+      network: NETWORKS.ethereum,
+    });
+    expect(prepared.transaction.maxFeePerGas).toBe(3_100_000_000n);
+    expect(prepared.preview.estimatedFee).toBe(65_100_000_000_000n);
+    expect(requests).toContain('eth_getBlockByNumber');
   });
   it('blocks chain mismatch and mismatched signing account', async () => {
     const { TransactionBuilder, NETWORKS, EvmWallet } = await import('../src/index.js');
@@ -167,11 +216,12 @@ describe('ERC-20 operations', () => {
     const rpc = new EvmRpc({
       request: async <T>(method: string) => {
         calls.push(method);
+        if (method === 'eth_getBlockByNumber') return { baseFeePerGas: '0x3b9aca00' } as T;
         const values: Record<string, string> = {
           eth_chainId: '0x1',
           eth_getTransactionCount: '0x2',
           eth_gasPrice: '0x3b9aca00',
-          eth_maxPriorityFeePerGas: '0x3b9aca0',
+          eth_maxPriorityFeePerGas: '0x5f5e100',
           eth_call: '0x',
           eth_estimateGas: '0x927c',
         };
@@ -197,14 +247,16 @@ describe('ERC-20 operations', () => {
   it('encodes approve and rejects negative token amounts', async () => {
     const rpc = new EvmRpc({
       request: async <T>(method: string) =>
-        ({
-          eth_chainId: '0x1',
-          eth_getTransactionCount: '0x2',
-          eth_gasPrice: '0x1',
-          eth_maxPriorityFeePerGas: '0x1',
-          eth_call: '0x',
-          eth_estimateGas: '0x5208',
-        })[method] as T,
+        method === 'eth_getBlockByNumber'
+          ? ({ baseFeePerGas: '0x3b9aca00' } as T)
+          : ({
+              eth_chainId: '0x1',
+              eth_getTransactionCount: '0x2',
+              eth_gasPrice: '0x1',
+              eth_maxPriorityFeePerGas: '0x1',
+              eth_call: '0x',
+              eth_estimateGas: '0x5208',
+            }[method] as T),
     });
     const { Erc20Builder, NETWORKS, TransactionBuilder } = await import('../src/index.js');
     const builder = new Erc20Builder(new TransactionBuilder(rpc), rpc);
@@ -235,14 +287,16 @@ describe('NFT operations', () => {
   const recipient = '0x00000000000000000000000000000000000000bb' as const;
   const rpc = new EvmRpc({
     request: async <T>(method: string) =>
-      ({
-        eth_chainId: '0x1',
-        eth_getTransactionCount: '0x1',
-        eth_gasPrice: '0x3b9aca00',
-        eth_maxPriorityFeePerGas: '0x3b9aca0',
-        eth_call: '0x',
-        eth_estimateGas: '0x927c',
-      })[method] as T,
+      method === 'eth_getBlockByNumber'
+        ? ({ baseFeePerGas: '0x3b9aca00' } as T)
+        : ({
+            eth_chainId: '0x1',
+            eth_getTransactionCount: '0x1',
+            eth_gasPrice: '0x3b9aca00',
+            eth_maxPriorityFeePerGas: '0x5f5e100',
+            eth_call: '0x',
+            eth_estimateGas: '0x927c',
+          }[method] as T),
   });
   it('prepares simulated ERC-721 and ERC-1155 transfers', async () => {
     const { NftBuilder, NETWORKS, TransactionBuilder } = await import('../src/index.js');

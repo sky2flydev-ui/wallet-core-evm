@@ -37,6 +37,7 @@ export interface TransactionPreview {
   readonly totalDebit: bigint;
   readonly nonce: number;
   readonly gasLimit: bigint;
+  readonly baseFeePerGas: bigint;
   readonly maxFeePerGas: bigint;
   readonly maxPriorityFeePerGas: bigint;
   readonly action?: string | undefined;
@@ -83,11 +84,13 @@ export class TransactionBuilder {
         `RPC chain mismatch: expected ${request.network.chainId}, got ${actualChainId}`,
       );
     const nonce = await this.rpc.nonce(request.from);
-    const [gasPrice, priority] = await Promise.all([
-      this.rpc.gasPrice(),
+    const [baseFeePerGas, priority] = await Promise.all([
+      this.rpc.latestBaseFeePerGas(),
       this.rpc.maxPriorityFeePerGas(),
     ]);
-    const maxFeePerGas = gasPrice > priority ? gasPrice : priority;
+    // EIP-1559 blocks may raise base fee by up to 12.5%; doubling it provides
+    // the standard next-block safety envelope while priority remains explicit.
+    const maxFeePerGas = baseFeePerGas * 2n + priority;
     const gas =
       request.gasLimit ??
       (await this.rpc.estimateGas({
@@ -120,6 +123,7 @@ export class TransactionBuilder {
         totalDebit: request.value + estimatedFee,
         nonce,
         gasLimit: gas,
+        baseFeePerGas,
         maxFeePerGas,
         maxPriorityFeePerGas: priority,
       },
@@ -135,11 +139,13 @@ export class TransactionBuilder {
         `RPC chain mismatch: expected ${request.network.chainId}, got ${actualChainId}`,
       );
     const nonce = await this.rpc.nonce(request.from);
-    const [gasPrice, priority] = await Promise.all([
-      this.rpc.gasPrice(),
+    const [baseFeePerGas, priority] = await Promise.all([
+      this.rpc.latestBaseFeePerGas(),
       this.rpc.maxPriorityFeePerGas(),
     ]);
-    const maxFeePerGas = gasPrice > priority ? gasPrice : priority;
+    // EIP-1559 blocks may raise base fee by up to 12.5%; doubling it provides
+    // the standard next-block safety envelope while priority remains explicit.
+    const maxFeePerGas = baseFeePerGas * 2n + priority;
     const rpcCall = {
       from: getAddress(request.from),
       to: getAddress(request.to),
@@ -173,6 +179,7 @@ export class TransactionBuilder {
         totalDebit: request.value + estimatedFee,
         nonce,
         gasLimit: gas,
+        baseFeePerGas,
         maxFeePerGas,
         maxPriorityFeePerGas: priority,
         action: request.action,
