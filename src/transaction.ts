@@ -18,6 +18,7 @@ export interface UnsignedEip1559Transaction {
   readonly to: `0x${string}`;
   readonly value: bigint;
   readonly gas: bigint;
+  readonly data?: Hex | undefined;
   readonly maxFeePerGas: bigint;
   readonly maxPriorityFeePerGas: bigint;
   readonly action?: string | undefined;
@@ -162,6 +163,7 @@ export class TransactionBuilder {
       to: getAddress(request.to),
       value: request.value,
       gas,
+      data: request.data,
       maxFeePerGas,
       maxPriorityFeePerGas: priority,
     };
@@ -194,7 +196,7 @@ export class TransactionBuilder {
     if (getAddress(account.address) !== prepared.transaction.from)
       throw new Error('Signing account does not match transaction.from');
     const tx = prepared.transaction;
-    return account.signTransaction({
+    const signable = {
       type: 'eip1559',
       chainId: tx.chainId,
       nonce: tx.nonce,
@@ -203,6 +205,8 @@ export class TransactionBuilder {
       gas: tx.gas,
       maxFeePerGas: tx.maxFeePerGas,
       maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
-    });
+      ...(tx.data === undefined ? {} : { data: tx.data }),
+    } as const;
+    return account.signTransaction(signable);
   }
 }

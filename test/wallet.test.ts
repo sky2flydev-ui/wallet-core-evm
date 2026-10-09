@@ -143,11 +143,29 @@ describe('EIP-1559 transaction pipeline', () => {
     expect(prepared.transaction.maxPriorityFeePerGas).toBe(100_000_000n);
     expect(prepared.transaction.maxFeePerGas).toBe(2_100_000_000n);
     expect(prepared.preview.estimatedFee).toBe(44_100_000_000_000n);
-    const signature = await new TransactionBuilder(rpc).sign(
-      prepared,
-      EvmWallet.fromMnemonic(MNEMONIC).account(0),
-    );
-    expect(signature).toMatch(/^0x[0-9a-f]+$/);
+    let signerPayload: Record<string, unknown> | undefined;
+    const capturingAccount = {
+      address: from,
+      signTransaction: async (payload: Record<string, unknown>) => {
+        signerPayload = payload;
+        return '0x1234' as `0x${string}`;
+      },
+    } as never;
+    const signature = await new TransactionBuilder(rpc).sign(prepared, capturingAccount);
+    expect(signature).toBe('0x1234');
+    expect(signerPayload).toEqual({
+      type: 'eip1559',
+      chainId: prepared.transaction.chainId,
+      nonce: prepared.transaction.nonce,
+      to: prepared.transaction.to,
+      value: prepared.transaction.value,
+      gas: prepared.transaction.gas,
+      maxFeePerGas: prepared.transaction.maxFeePerGas,
+      maxPriorityFeePerGas: prepared.transaction.maxPriorityFeePerGas,
+    });
+    await expect(
+      new TransactionBuilder(rpc).sign(prepared, EvmWallet.fromMnemonic(MNEMONIC).account(0)),
+    ).resolves.toMatch(/^0x[0-9a-f]+$/);
   });
   it('uses the latest base fee plus a next-block safety envelope', async () => {
     const { TransactionBuilder, NETWORKS } = await import('../src/index.js');
@@ -243,6 +261,18 @@ describe('ERC-20 operations', () => {
     expect(calls.indexOf('eth_call')).toBeGreaterThan(-1);
     expect(calls.indexOf('eth_call')).toBeLessThan(calls.indexOf('eth_estimateGas'));
     expect(prepared.transaction.to).toBe('0x00000000000000000000000000000000000000AA');
+    expect(prepared.transaction.data).toMatch(/^0xa9059cbb[0-9a-f]+$/);
+    let signerPayload: Record<string, unknown> | undefined;
+    const capturingAccount = {
+      address: from,
+      signTransaction: async (payload: Record<string, unknown>) => {
+        signerPayload = payload;
+        return '0x1234' as `0x${string}`;
+      },
+    } as never;
+    await new TransactionBuilder(rpc).sign(prepared, capturingAccount);
+    expect(signerPayload?.data).toBe(prepared.transaction.data);
+    expect(signerPayload?.maxFeePerGas).toBe(prepared.transaction.maxFeePerGas);
   });
   it('encodes approve and rejects negative token amounts', async () => {
     const rpc = new EvmRpc({
@@ -319,6 +349,8 @@ describe('NFT operations', () => {
     expect(nft721.preview.standard).toBe('ERC-721');
     expect(nft721.preview.assetId).toBe(42n);
     expect(nft721.preview.quantity).toBe(1n);
+    expect(nft721.transaction.data).toMatch(/^0x42842e0e[0-9a-f]+$/);
+    expect(nft1155.transaction.data).toMatch(/^0xf242432a[0-9a-f]+$/);
     expect(nft1155.preview.standard).toBe('ERC-1155');
     expect(nft1155.preview.assetId).toBe(7n);
     expect(nft1155.preview.quantity).toBe(3n);
