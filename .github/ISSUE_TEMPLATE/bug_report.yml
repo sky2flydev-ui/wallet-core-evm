@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible defect without including secrets
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include seed phrases, private keys, passwords, API keys, or wallet files. For security vulnerabilities use a private GitHub Security Advisory.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal code or steps using synthetic accounts and testnet only.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and logs
+    validations:
+      required: true
