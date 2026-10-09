@@ -7,3 +7,6 @@ export * from './moralis.js';
 export * from './chains.js';
 export * from './transaction.js';
 export * from './erc20.js';
+export * from './nft.js';
+export * from './secure-store.js';
+export * from './eip712.js';

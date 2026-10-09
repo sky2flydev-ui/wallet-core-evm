@@ -12,11 +12,14 @@ Production-oriented **non-custodial EVM wallet core**. The package never sends a
 - Moralis token-balance adapter with injected API key and fetcher.
 - Network registry and EIP-1559 native-transfer preparation with chain-ID guard, fee preview, nonce, gas estimate, and local signing. No broadcast occurs during preparation or signing.
 - ERC-20 `transfer` and `approve` calldata builders with address/amount validation, `eth_call` simulation before gas estimation, and token-aware previews.
+- ERC-721 and ERC-1155 safe transfer/approval builders with simulation and NFT-aware previews.
+- EIP-712 typed-data signing with domain chain-ID enforcement.
+- Atomic encrypted vault file storage with directory mode `0700`, file mode `0600`, temporary-file write, and rename. The file never contains the mnemonic in plaintext.
 - Strict TypeScript, no placeholder implementations, deterministic tests planned for the next increment.
 
 ## Security boundary
 
-This is a wallet **core**, not a hosted wallet or custody backend. The application embedding it is responsible for secure password entry, vault storage permissions, device compromise protection, backups, phishing-resistant transaction review, chain allowlists, and dependency auditing. Never commit vaults, mnemonics, API keys, or private keys.
+This is a wallet **core**, not a hosted wallet or custody backend. `EncryptedFileVaultStore` protects the vault at rest, but the application must still protect the password, process memory, backups, and host account. The application embedding it is responsible for secure password entry, vault storage permissions, device compromise protection, backups, phishing-resistant transaction review, chain allowlists, and dependency auditing. Never commit vaults, mnemonics, API keys, or private keys.
 
 ## Quick start
 

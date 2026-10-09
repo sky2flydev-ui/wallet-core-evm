@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   createNewVault,
   createVault,
@@ -223,5 +226,87 @@ describe('ERC-20 operations', () => {
         network: NETWORKS.ethereum,
       }),
     ).rejects.toThrow('non-negative');
+  });
+});
+
+describe('NFT operations', () => {
+  const from = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' as const;
+  const token = '0x00000000000000000000000000000000000000aa' as const;
+  const recipient = '0x00000000000000000000000000000000000000bb' as const;
+  const rpc = new EvmRpc({
+    request: async <T>(method: string) =>
+      ({
+        eth_chainId: '0x1',
+        eth_getTransactionCount: '0x1',
+        eth_gasPrice: '0x3b9aca00',
+        eth_maxPriorityFeePerGas: '0x3b9aca0',
+        eth_call: '0x',
+        eth_estimateGas: '0x927c',
+      })[method] as T,
+  });
+  it('prepares simulated ERC-721 and ERC-1155 transfers', async () => {
+    const { NftBuilder, NETWORKS, TransactionBuilder } = await import('../src/index.js');
+    const builder = new NftBuilder(new TransactionBuilder(rpc), rpc);
+    const nft721 = await builder.prepareErc721Transfer({
+      from,
+      token,
+      to: recipient,
+      tokenId: 42n,
+      network: NETWORKS.ethereum,
+    });
+    const nft1155 = await builder.prepareErc1155Transfer({
+      from,
+      token,
+      to: recipient,
+      tokenId: 7n,
+      amount: 3n,
+      network: NETWORKS.ethereum,
+    });
+    expect(nft721.preview.standard).toBe('ERC-721');
+    expect(nft721.preview.assetId).toBe(42n);
+    expect(nft721.preview.quantity).toBe(1n);
+    expect(nft1155.preview.standard).toBe('ERC-1155');
+    expect(nft1155.preview.assetId).toBe(7n);
+    expect(nft1155.preview.quantity).toBe(3n);
+  });
+});
+
+describe('encrypted file vault storage', () => {
+  it('writes only encrypted JSON with restrictive permissions and round-trips', async () => {
+    const { EncryptedFileVaultStore } = await import('../src/index.js');
+    const directory = await mkdtemp(join(tmpdir(), 'wallet-core-'));
+    const path = join(directory, 'vault.json');
+    const vault = createVault(MNEMONIC, 'correct horse battery staple');
+    const store = new EncryptedFileVaultStore(path);
+    await store.save(vault);
+    const metadata = await stat(path);
+    const raw = await readFile(path, 'utf8');
+    expect(metadata.mode & 0o777).toBe(0o600);
+    expect(raw).not.toContain(MNEMONIC);
+    expect((await store.load()).ciphertext).toBe(vault.ciphertext);
+  });
+});
+
+describe('EIP-712 typed data', () => {
+  it('signs typed data locally and rejects a domain chain mismatch', async () => {
+    const { Eip712Signer, EvmWallet } = await import('../src/index.js');
+    const account = EvmWallet.fromMnemonic(MNEMONIC).account(0);
+    const signer = new Eip712Signer();
+    const request = {
+      account,
+      chainId: 1,
+      domain: {
+        name: 'WalletCore',
+        version: '1',
+        chainId: 1,
+        verifyingContract: '0x0000000000000000000000000000000000000001' as const,
+      },
+      types: { Mail: [{ name: 'contents', type: 'string' }] as const },
+      primaryType: 'Mail',
+      message: { contents: 'Approve this typed message' },
+    };
+    const signature = await signer.sign(request);
+    expect(signature).toMatch(/^0x[0-9a-f]+$/);
+    await expect(signer.sign({ ...request, chainId: 5 })).rejects.toThrow('EIP-712 chain mismatch');
   });
 });
