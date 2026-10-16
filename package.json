@@ -44,7 +44,7 @@
     "@noble/hashes": "^1.8.0",
     "@scure/bip32": "^1.7.0",
     "@scure/bip39": "^2.4.0",
-    "viem": "^2.21.54"
+    "viem": "^2.57.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
